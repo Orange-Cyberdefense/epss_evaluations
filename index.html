@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<!-- Credit https://www.js-tutorials.com/javascript-tutorial/reading-csv-file-using-javascript-html5/ -->
+	<meta charset="UTF-8">
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+	<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.0/math.js"
+		integrity="sha512-D/RyeW6S1nM+OJUBeS/w8U1CVwAaR3EMBRzaacbYkjMqgF+4rcvYR50LC+6egba1WHJSmf6Sua2Zj5V+Cg85lQ=="
+		crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+	<title>Orange Cyberdefense: SRC EPSS Tool</title>
+	<style>
+		.mainheader {
+			font-size:40px;
+			text-align: center;
+		}
+		.pdfobject-container {
+			height: 500px;
+		}
+
+		.pdfobject {
+			border: 1px solid #F16E00;
+		}
+
+		.btn-primary {
+			background-color: #F16E00;
+			border-color: #F16E00;
+		}
+
+		.hint {
+			background-color: #F16E00;
+			padding: 20px;
+			display: none;
+		}
+
+		span:hover+.hint {
+			display: block;
+		}
+	</style>
+</head>
+
+<body>
+	<h1 class="mainheader">EPSS - Efficiency/Coverage/Effort Calculator</h1>
+	<div class="container" style="padding:10px 10px;">
+		<h2>Read Vulns CSV file</h2>
+		<div class="well">
+			<div class="row">
+				The comma separated values (CSV) file format must have a column named <strong>"cve"</strong> and a
+				column named <strong>"epss"</strong> at least. This file is the <strong>superset</strong> and contains a
+				subset of the <strong>Exploited Vulns</strong>.
+			</div>
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="files">Vulns CSV file:</label>
+						<input type="file" id="strat-files" class="form-control" accept=".csv" required />
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-strat-file" class="btn btn-primary">Upload File</button>
+					</div>
+				</form>
+			</div>
+			<div class="row" id="parsed_strat_csv_status">
+			</div>
+		</div>
+	</div>
+	<div class="container" style="padding:10px 10px;">
+		<h2>Read Exploited Vulns CSV file</h2>
+		<div class="well">
+			<div class="row">
+				The comma separated values (CSV) file format must have a column named <strong>"cve"</strong> and a
+				column named <strong>"epss"</strong> at least. This file is a <strong>subset</strong> of the
+				<strong>Vulns</strong> supplied above.
+			</div>
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="files">Exploit CSV file:</label>
+						<input type="file" id="exploit-files" class="form-control" accept=".csv" required />
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-exploit-file" class="btn btn-primary">Upload File</button>
+					</div>
+				</form>
+			</div>
+			<div class="row" id="parsed_exploit_csv_list">
+			</div>
+		</div>
+	</div>
+	<div class="container" style="padding:10px 10px;">
+		<h2>Chart</h2>
+		<div class="well">
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<button type="submit" id="submit-plot" class="btn btn-primary">Plot</button>
+					</div>
+				</form>
+			</div>
+			<div class="row" class="row" id="myDiv">
+			</div>
+			<div class="row">
+				<!--https://www.w3schools.com/icons/icons_reference.asp -->
+				<button class="btn" onclick="toggleHint();"><i class="material-icons" style="font-size:20px">help_outline</i></button>
+			</div>
+			<div id="terminology" class="hint" style="padding:10px 10px;">
+				<h3>Terminology</h3>
+				<p>
+					For more information on EPSS and the terminology please visit the official web site <a
+						href="https://www.first.org/epss/model">here.</a>
+				</p>
+				<dl>
+					<dt>True Positives</dt>
+					<dd>
+						TP are vulnerabilities that were exploited and that our we decided to patch.
+					</dd>
+					<dt>False Positives</dt>
+					<dd>
+						FP are vulnerabilities we patched, but weren't exploited.
+					</dd>
+					<dt>False Negatives</dt>
+					<dd>
+						FN are vulnerabilities that were exploited, but we did not patch.
+					</dd>
+					<dt>True Negatives</dt>
+					<dd>
+						TN are vulnerabilities that were not exploited and that we did not patch.
+					</dd>
+					<dt>Efficieny</dt>
+					<dd>
+						The ratio of how many vulnerabilities were patched that were exploited (TP) versus the total
+						number of
+						patched vulnerabilities (TP + FP).
+						This is also called Precision and is calculated as TP / (TP + FP).
+					</dd>
+					<dt>Coverage</dt>
+					<dd>
+						The ratio of how many vulnerabilities were patched that were exploited (TP) versus the total
+						number of
+						exploited vulnerabilities (TP + FN).
+						This is also called Recall and is calculated as TP / (TP + FN).
+					</dd>
+					<dt>Effort</dt>
+					<dd>
+						The ratio of vulnerabilities selected by choosing a specific threshold to the total number of
+						vulnerabilities that can be patched.
+						Put differently, a subset of vulnerabilities will be patched as a percentage of the total number
+						of
+						vulnerabilities that can be patched.
+					</dd>
+				</dl>
+			</div>
+			<div class="row" class="row" id="show-intersections">
+			</div>
+		</div>
+	</div>
+
+	<div class="container" style="padding:10px 10px;">
+
+		<h2>Calculate Strategy</h2>
+		<div class="well">
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="calculated">EPSS</label>
+						<input type="input" id="calc-strat" class="form-control" required name="calc-strat"
+							value="0.5" />
+						<input id="calc-strat-range" type="range" min="0" max="1.00" step="any" />
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-calc-strat" class="btn btn-primary">Calc</button>
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-download-strat" class="btn btn-primary">Download CSV</button>
+					</div>
+					<a id="exportLink"></a>
+				</form>
+			</div>
+			<div class="row" class="row" id="calculated-strat">
+			</div>
+		</div>
+		<div class="well">
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="calculated">Coverage</label>
+						<input type="input" id="calc-strat-coverage" class="form-control" required name="calc-strat-coverage"
+							value="0.5" />
+						<input id="calc-strat-coverage-range" type="range" min="0" max="1.00" step="0.01" />
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-calc-strat-coverage" class="btn btn-primary">Calc</button>
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-download-strat-coverage" class="btn btn-primary">Download CSV</button>
+					</div>
+					<a id="exportLinkCoverage"></a>
+				</form>
+			</div>
+			<div class="row" class="row" id="calculated-strat-coverage">
+			</div>
+		</div>
+		<div class="well">
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="calculated">Effort</label>
+						<input type="input" id="calc-strat-effort" class="form-control" required name="calc-strat-effort"
+							value="0.5" />
+						<input id="calc-strat-effort-range" type="range" min="0" max="1.00" step="0.01" />
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-calc-strat-effort" class="btn btn-primary">Calc</button>
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-download-strat-effort" class="btn btn-primary">Download CSV</button>
+					</div>
+					<a id="exportLinkEffort"></a>
+				</form>
+			</div>
+			<div class="row" class="row" id="calculated-strat-effort">
+			</div>
+		</div>
+		<div class="well">
+			<div class="row">
+				<form class="form-inline">
+					<div class="form-group">
+						<label for="calculated">Efficiency</label>
+						<input type="input" id="calc-strat-efficiency" class="form-control" required name="calc-strat-efficiency"
+							value="0.5" />
+						<input id="calc-strat-efficiency-range" type="range" min="0" max="1.00" step="0.01" />
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-calc-strat-efficiency" class="btn btn-primary">Calc</button>
+					</div>
+					<div class="form-group">
+						<button type="submit" id="submit-download-strat-efficiency" class="btn btn-primary">Download CSV</button>
+					</div>
+					<a id="exportLinkEfficiency"></a>
+				</form>
+			</div>
+			<div class="row" class="row" id="calculated-strat-efficiency">
+			</div>
+		</div>
+	</div>
+
+
+</body>
+
+<script type="text/javascript">
+	// https://www.w3schools.com/howto/howto_js_toggle_class.asp
+	function toggleHint() {
+		var element = document.getElementById("terminology");
+		element.classList.toggle("hint");
+	}
+	// https://stackoverflow.com/questions/9043805/test-if-two-lines-intersect-javascript-function
+	function intersects(a, b, c, d, p, q, r, s) {
+		var det, gamma, lambda;
+		det = (c - a) * (s - q) - (r - p) * (d - b);
+		if (det === 0) {
+			return false;
+		} else {
+			lambda = ((s - q) * (r - a) + (p - r) * (s - b)) / det;
+			gamma = ((b - d) * (r - a) + (c - a) * (s - b)) / det;
+			return (0 < lambda && lambda < 1) && (0 < gamma && gamma < 1);
+		}
+	};
+
+	$(document).ready(function () {
+		var rounding_precision = 4;
+		var strat_data_cve = [];
+		var strat_data_threshold_val = [];
+		var exploit_data_cve = new Set([]);
+		var coverage_strategy_cvss_threshold = 0.0;
+		var effort_strategy_cvss_threshold = 0.0;
+		var efficiency_strategy_cvss_threshold = 0.0;
+
+		const value = document.querySelector("#calc-strat");
+		const input = document.querySelector("#calc-strat-range");
+		input.addEventListener("input", (event) => {
+			value.value = roundTo(event.target.value, 4);
+		});
+
+		const coverage_value = document.querySelector("#calc-strat-coverage");
+		const input_coverage = document.querySelector("#calc-strat-coverage-range");
+		input_coverage.addEventListener("input", (event) => {
+			coverage_value.value = roundTo(event.target.value, rounding_precision);
+		});
+
+		const effort_value = document.querySelector("#calc-strat-effort");
+		const input_effort = document.querySelector("#calc-strat-effort-range");
+		input_effort.addEventListener("input", (event) => {
+			effort_value.value = roundTo(event.target.value, rounding_precision);
+		});
+
+		const efficiency_value = document.querySelector("#calc-strat-efficiency");
+		const input_efficiency = document.querySelector("#calc-strat-efficiency-range");
+		input_efficiency.addEventListener("input", (event) => {
+			efficiency_value.value = roundTo(event.target.value, rounding_precision);
+		});
+
+		$('#submit-download-strat').on("click", function (e) {
+			e.preventDefault();
+			// https://stackoverflow.com/questions/16082231/how-to-data-export-to-csv-using-jquery-or-javascript
+			var filename = 'strategy_cves.csv';
+			var tval = $("#calc-strat").val();
+			var cves = get_cves_for_threshold(strat_data_cve, strat_data_threshold_val, tval);
+			console.info('!!CVES => ', cves.length);
+			var outputCSV = 'cve,epss';
+			var i = 0;
+			for (i = 0; i < cves.length; i++) {
+				outputCSV += '\n' + cves[i][0] + ',' + cves[i][1];
+			}
+			var blobby = new Blob([outputCSV], { type: 'text/plain' });
+
+			$('#exportLink').attr({
+				'download': filename,
+				'href': window.URL.createObjectURL(blobby),
+				'target': '_blank'
+			});
+
+			exportLink.click();
+		});
+
+		$('#submit-download-strat-coverage').on("click", function (e) {
+			e.preventDefault();
+			// https://stackoverflow.com/questions/16082231/how-to-data-export-to-csv-using-jquery-or-javascript
+			var filename = 'coverage_strategy_cves.csv';
+			var cves = get_cves_for_threshold(strat_data_cve, strat_data_threshold_val, coverage_strategy_cvss_threshold);
+			console.info('!!CVES => ', cves.length);
+			var outputCSV = '"cve","epss"';
+			var i = 0;
+			for (i = 0; i < cves.length; i++) {
+				outputCSV += '\r\n"' + cves[i][0] + '","' + cves[i][1] + '"';
+			}
+			var blobby = new Blob([outputCSV], { type: 'text/plain' });
+
+			$('#exportLinkCoverage').attr({
+				'download': filename,
+				'href': window.URL.createObjectURL(blobby),
+				'target': '_blank'
+			});
+
+			exportLinkCoverage.click();
+		});
+
+		$('#submit-download-strat-effort').on("click", function (e) {
+			e.preventDefault();
+			// https://stackoverflow.com/questions/16082231/how-to-data-export-to-csv-using-jquery-or-javascript
+			var filename = 'effort_strategy_cves.csv';
+			var cves = get_cves_for_threshold(strat_data_cve, strat_data_threshold_val, effort_strategy_cvss_threshold);
+			console.info('!!CVES => ', cves.length);
+			var outputCSV = '"cve","epss"';
+			var i = 0;
+			for (i = 0; i < cves.length; i++) {
+				outputCSV += '\r\n"' + cves[i][0] + '","' + cves[i][1] + '"';
+			}
+			var blobby = new Blob([outputCSV], { type: 'text/plain' });
+
+			$('#exportLinkEffort').attr({
+				'download': filename,
+				'href': window.URL.createObjectURL(blobby),
+				'target': '_blank'
+			});
+
+			exportLinkEffort.click();
+		});
+
+		$('#submit-download-strat-efficiency').on("click", function (e) {
+			e.preventDefault();
+			// https://stackoverflow.com/questions/16082231/how-to-data-export-to-csv-using-jquery-or-javascript
+			var filename = 'efficiency_strategy_cves.csv';
+			var cves = get_cves_for_threshold(strat_data_cve, strat_data_threshold_val, efficiency_strategy_cvss_threshold);
+			console.info('!!CVES => ', cves.length);
+			var outputCSV = '"cve","epss"';
+			var i = 0;
+			for (i = 0; i < cves.length; i++) {
+				outputCSV += '\r\n"' + cves[i][0] + '","' + cves[i][1] + '"';
+			}
+			var blobby = new Blob([outputCSV], { type: 'text/plain' });
+
+			$('#exportLinkEfficiency').attr({
+				'download': filename,
+				'href': window.URL.createObjectURL(blobby),
+				'target': '_blank'
+			});
+
+			exportLinkEfficiency.click();
+		});
+
+		$('#submit-strat-file').on("click", function (e) {
+			e.preventDefault();
+			$("#parsed_strat_csv_status").empty()
+			$('#strat-files').parse({
+				config: {
+					delimiter: ",",
+					header: true,
+					complete: displayStratHTMLTable,
+				},
+				before: function (file, inputElem) {
+					//console.log("Parsing file...", file);
+					strat_data_cve = [];
+					strat_data_threshold_val = [];
+				},
+				error: function (err, file) {
+					$("#parsed_strat_csv_status").text("Failed to Load").appendTo("#parsed_strat_csv_status");
+				},
+				complete: function () {
+					var text = `Loaded ${strat_data_cve.length} records successfully`;
+					$("#parsed_strat_csv_status").text(text).appendTo("#parsed_strat_csv_status");
+				}
+			});
+		});
+
+		$('#submit-exploit-file').on("click", function (e) {
+			e.preventDefault();
+			$("#parsed_exploit_csv_list").empty();
+
+			$('#exploit-files').parse({
+				config: {
+					delimiter: ",",
+					header: true,
+					complete: displayExploitHTMLTable,
+				},
+				before: function (file, inputElem) {
+					exploit_data_cve = [];
+				},
+				error: function (err, file) {
+					$("#parsed_exploit_csv_list").text("Failed to Load").appendTo("#parsed_exploit_csv_list");
+				},
+				complete: function () {
+					var text = `Loaded ${exploit_data_cve.length} records successfully`;
+					$("#parsed_exploit_csv_list").text(text).appendTo("#parsed_exploit_csv_list");
+				}
+			});
+		});
+
+		$('#submit-plot').on("click", function (e) {
+			e.preventDefault();
+			plot_chart();
+		});
+
+		$('#submit-calc-strat').on("click", function (e) {
+			e.preventDefault();
+			threshold = $("#calc-strat").val();
+			// console.debug("Threshold =>", threshold);
+			calcStrategyHTMLTable(threshold);
+		});
+
+		$('#submit-calc-strat-coverage').on("click", function (e) {
+			e.preventDefault();
+			threshold = $("#calc-strat-coverage").val();
+			// console.debug("Threshold =>", threshold);
+			calcStrategyCoverageHTMLTable(threshold);
+		});
+
+		$('#submit-calc-strat-effort').on("click", function (e) {
+			e.preventDefault();
+			threshold = $("#calc-strat-effort").val();
+			// console.debug("Threshold =>", threshold);
+			calcStrategyEffortHTMLTable(threshold);
+		});
+
+		$('#submit-calc-strat-efficiency').on("click", function (e) {
+			e.preventDefault();
+			threshold = $("#calc-strat-efficiency").val();
+			// console.debug("Threshold =>", threshold);
+			calcStrategyEfficiencyHTMLTable(threshold);
+		});
+
+		function displayStratHTMLTable(results) {
+			var data = results.data;
+			var cve_arr = [];
+			var threshold_val_arr = [];
+			var i = 0;
+			// The minus one in the condition "i < data.length - 1" is needed because it seems the array length is duplicated
+			// eventhough PapaParse removes the first row with the column names 
+			for (i = 0; i < data.length - 1; i++) {
+				var row = data[i];
+				// CVE is the common element
+				cve = row['cve'];
+				cve_arr.push(cve);
+				// Currently use the EPSS as the threshold
+				epss = row['epss'];
+				threshold_val_arr.push(epss);
+			}
+			strat_data_cve = cve_arr;
+			strat_data_threshold_val = threshold_val_arr;
+		}
+
+		function displayExploitHTMLTable(results) {
+			var data = results.data;
+			var cve_arr = [];
+			var i = 0;
+			// The minus one in the condition "i < data.length - 1" is needed because it seems the array length is duplicated
+			// eventhough PapaParse removes the first row with the column names 
+			for (i = 0; i < data.length - 1; i++) {
+				var row = data[i];
+				cve = row['cve'];
+				cve_arr.push(cve);
+			}
+			exploit_data_cve = cve_arr;
+		}
+
+		function tp_calc(strat_arr, exploit_arr) {
+			var strat_set = new Set(strat_arr);
+			var exploit_set = new Set(exploit_arr);
+			var intersection = new Set([...strat_set].filter(x => exploit_set.has(x)));
+			return intersection.size;
+		}
+
+		function tn_calc(all_vuln_arr, strat_arr, exploit_arr) {
+			var all_vuln_set = new Set(all_vuln_arr);
+			var strat_set = new Set(strat_arr);
+			var exploit_set = new Set(exploit_arr);
+			var intersection = new Set([...all_vuln_set].filter(x => !strat_set.has(x)));
+			intersection = new Set([...intersection].filter(x => !exploit_set.has(x)));
+			return intersection.size;
+		}
+
+		function fp_calc(strat_arr, exploit_arr) {
+			var strat_set = new Set(strat_arr);
+			var exploit_set = new Set(exploit_arr);
+			var difference = new Set();
+			strat_set.forEach(element => {
+				if (!exploit_set.has(element)) {
+					difference.add(element);
+				}
+			});
+			return difference.size;
+		}
+
+		function fn_calc(strat_arr, exploit_arr) {
+			var strat_set = new Set(strat_arr);
+			var exploit_set = new Set(exploit_arr);
+			var difference = new Set();
+			exploit_set.forEach(element => {
+				if (!strat_set.has(element)) {
+					difference.add(element);
+				}
+			});
+			return difference.size;
+		}
+
+		function precision_calc(tp_count, fp_count) {
+			var result = 0;
+			var sum = tp_count + fp_count;
+			if (sum > 0) {
+				result = roundToAsFloat(tp_count / sum, 4)
+			}
+			return result;
+		}
+
+		function recall_calc(tp_count, fn_count) {
+			var result = 0;
+			var sum = tp_count + fn_count;
+			if (sum > 0) {
+				result = roundToAsFloat(tp_count / sum, 4)
+			}
+			return result;
+		}
+
+		function roundTo(n, digits) {
+			// https://stackoverflow.com/questions/15762768/javascript-math-round-to-two-decimal-places
+			var negative = false;
+			if (digits === undefined) {
+				digits = 0;
+			}
+			if (n < 0) {
+				negative = true;
+				n = n * -1;
+			}
+			var multiplicator = Math.pow(10, digits);
+			n = parseFloat((n * multiplicator).toFixed(11));
+			n = (Math.round(n) / multiplicator).toFixed(digits);
+			if (negative) {
+				n = (n * -1).toFixed(digits);
+			}
+			return n;
+		}
+
+		function roundToAsFloat(n, digits) {
+			v = roundTo(n, digits);
+			r = parseFloat(v);
+			return r
+		};
+
+		function get_cves_for_threshold(strat_data_cve, strat_data_threshold_val, threshold) {
+			var result = [];
+			for (i = 0; i < strat_data_threshold_val.length; i++) {
+				var t = roundToAsFloat(strat_data_threshold_val[i], 4);
+				if (t >= threshold) {
+					r = [];
+					r.push(strat_data_cve[i]);
+					r.push(strat_data_threshold_val[i]);
+					result.push(r);
+				}
+			}
+			return result;
+		}
+
+		function find_max_threshold(strat_data_threshold_val) {
+			var result = 0.0;
+			for (i = 0; i < strat_data_threshold_val.length; i++) {
+				var t = roundToAsFloat(strat_data_threshold_val[i], 4);
+				if (t > result) {
+					result = t;
+				}
+			}
+			return result;
+		}
+
+
+		function filter_threshold(strat_data_cve, strat_data_threshold_val, threshold) {
+			var result = [];
+			for (i = 0; i < strat_data_threshold_val.length; i++) {
+				var t = roundToAsFloat(strat_data_threshold_val[i], 4);
+				if (t >= threshold) {
+					cve = strat_data_cve[i];
+					result.push(cve);
+				}
+			}
+			return result;
+		}
+
+		function calcStrategyHTMLTable(threshold) {
+			var tmp_threshold = roundToAsFloat(threshold, rounding_precision);
+			var filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, tmp_threshold);
+			var start_total_len = strat_data_cve.length;
+			var strat_len = filtered_strategy.length;
+			var tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+			var fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+			var fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+			var tn_count = tn_calc(strat_data_cve, filtered_strategy, exploit_data_cve);
+			var total = tp_count + fp_count + tn_count + fn_count;
+			var precision_val = precision_calc(tp_count, fp_count);
+			var recall_val = recall_calc(tp_count, fn_count);
+			var effort_val = roundTo(strat_len / start_total_len, rounding_precision);
+			var table = "<table class='table'>";
+			table += "<th>";
+			table += "EPSS";
+			table += "</th>";
+			table += "<th>";
+			table += "True Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "False Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "True Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "False Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "Remediation";
+			table += "</th>";
+			table += "<th>";
+			table += "Total";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Efficiency";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Coverage";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Effort";
+			table += "</th>";
+
+			table += "<tr>";
+
+			table += "<td>";
+			table += threshold;
+			table += "</td>";
+			table += "<td>";
+			table += tp_count;
+			table += "</td>";
+			table += "<td>";
+			table += fp_count;
+			table += "</td>";
+			table += "<td>";
+			table += tn_count;
+			table += "</td>";
+			table += "<td>";
+			table += fn_count;
+			table += "</td>";
+			table += "<td>";
+			table += strat_len;
+			table += "</td>";
+			table += "<td>";
+			table += total;
+			table += "</td>";
+
+			table += "<td>";
+			table += precision_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += recall_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += effort_val;
+			table += "</td>";
+
+			table += "</tr>";
+
+			table += "</table>";
+			$("#calculated-strat").html(table);
+		}
+
+		function calcStrategyCoverageHTMLTable(threshold) {
+			var coverage_threshold = roundToAsFloat(threshold, rounding_precision);
+			var selected_filtered_strategy = 0;
+			var selected_start_total_len = 0;
+			var selected_strat_len = 0;
+			var selected_tp_count = 0;
+			var selected_fp_count = 0;
+			var selected_fn_count = 0;
+			var selected_tn_count = 0;
+			var selected_total = 0;
+			var selected_precision_val = 0.0;
+			var selected_effort_val = 0.0;
+			var selected_recall_val = 0.0;
+			var selected_epss_threshold = 0;
+
+			for (var epss_threshold = 0.0; epss_threshold <= 1.0; epss_threshold += 0.001) {
+				var t = roundToAsFloat(epss_threshold, rounding_precision);
+				//console.info("calcStartCoverage epss_threshold", t);
+				var filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, t);
+				var start_total_len = strat_data_cve.length;
+				var strat_len = filtered_strategy.length;
+				var tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+				var fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+				var fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+				var tn_count = tn_calc(strat_data_cve, filtered_strategy, exploit_data_cve);
+				var total = tp_count + fp_count + tn_count + fn_count;
+				var precision_val = precision_calc(tp_count, fp_count);
+				var recall_val = recall_calc(tp_count, fn_count);
+				var effort_val = roundTo(strat_len / start_total_len, rounding_precision);
+				var d1 = Math.abs(coverage_threshold - recall_val);
+				var d2 = Math.abs(coverage_threshold - selected_recall_val);
+				// select the coverage threshold that is the closest to the specified threshold.
+				// Is it the already selected value or is it the newly calculated value?
+				if (d1 < d2 || selected_recall_val == 0.0) {
+					selected_epss_threshold = t;
+					coverage_strategy_cvss_threshold = t;
+					selected_tp_count = tp_count;
+					selected_fp_count = fp_count;
+					selected_fn_count = fn_count;
+					selected_tn_count = tn_count;
+					selected_strat_len = strat_len;
+					selected_total = total;
+					selected_precision_val = precision_val;
+					selected_effort_val = effort_val;
+					selected_recall_val = recall_val;
+				}
+			}
+			var table = "<table class='table'>";
+			table += "<th>";
+			table += "EPSS";
+			table += "</th>";
+			table += "<th>";
+			table += "True Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "False Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "True Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "False Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "Remediation";
+			table += "</th>";
+			table += "<th>";
+			table += "Total";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Efficiency";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Coverage";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Effort";
+			table += "</th>";
+
+			table += "<tr>";
+
+			table += "<td>";
+			table += roundTo(selected_epss_threshold, rounding_precision);
+			table += "</td>";
+			table += "<td>";
+			table += selected_tp_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_fp_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_tn_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_fn_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_strat_len;
+			table += "</td>";
+			table += "<td>";
+			table += selected_total;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_precision_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_recall_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_effort_val;
+			table += "</td>";
+
+			table += "</tr>";
+
+			table += "</table>";
+			$("#calculated-strat-coverage").html(table);
+		};
+
+		function calcStrategyEffortHTMLTable(threshold) {
+			var effort_threshold = roundToAsFloat(threshold, 1);
+			var selected_filtered_strategy = 0;
+			var selected_start_total_len = 0;
+			var selected_strat_len = 0;
+			var selected_tp_count = 0;
+			var selected_fp_count = 0;
+			var selected_fn_count = 0;
+			var selected_tn_count = 0;
+			var selected_total = 0;
+			var selected_precision_val = 0.0;
+			var selected_effort_val = 0.0;
+			var selected_recall_val = 0.0;
+			var selected_epss_threshold = 0;
+
+			for (var epss_threshold = 0.0; epss_threshold <= 1.0; epss_threshold += 0.001) {
+				var t = roundToAsFloat(epss_threshold, rounding_precision);
+				//console.info("calcStartEffort epss_threshold", t);
+				var filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, t);
+				var start_total_len = strat_data_cve.length;
+				var strat_len = filtered_strategy.length;
+				var tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+				var fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+				var fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+				var tn_count = tn_calc(strat_data_cve, filtered_strategy, exploit_data_cve);
+				var total = tp_count + fp_count + tn_count + fn_count;
+				var precision_val = precision_calc(tp_count, fp_count);
+				var recall_val = recall_calc(tp_count, fn_count);
+				var effort_val = roundTo(strat_len / start_total_len, rounding_precision);
+				var d1 = Math.abs(effort_threshold - effort_val);
+				var d2 = Math.abs(effort_threshold - selected_effort_val);
+				// select the coverage threshold that is the closest to the specified threshold.
+				// Is it the already selected value or is it the newly calculated value?
+				if (d1 < d2 || selected_effort_val == 0.0) {
+					selected_epss_threshold = t;
+					effort_strategy_cvss_threshold = t;
+					selected_tp_count = tp_count;
+					selected_fp_count = fp_count;
+					selected_fn_count = fn_count;
+					selected_tn_count = tn_count;
+					selected_strat_len = strat_len;
+					selected_total = total;
+					selected_precision_val = precision_val;
+					selected_effort_val = effort_val;
+					selected_recall_val = recall_val;
+				}
+			}
+			var table = "<table class='table'>";
+			table += "<th>";
+			table += "EPSS";
+			table += "</th>";
+			table += "<th>";
+			table += "True Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "False Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "True Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "False Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "Remediation";
+			table += "</th>";
+			table += "<th>";
+			table += "Total";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Efficiency";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Coverage";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Effort";
+			table += "</th>";
+
+			table += "<tr>";
+
+			table += "<td>";
+			table += roundTo(selected_epss_threshold, rounding_precision);
+			table += "</td>";
+			table += "<td>";
+			table += selected_tp_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_fp_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_tn_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_fn_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_strat_len;
+			table += "</td>";
+			table += "<td>";
+			table += selected_total;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_precision_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_recall_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_effort_val;
+			table += "</td>";
+
+			table += "</tr>";
+
+			table += "</table>";
+			$("#calculated-strat-effort").html(table);
+		};
+
+		function calcStrategyEfficiencyHTMLTable(threshold) {
+			var efficiency_threshold = roundToAsFloat(threshold, rounding_precision);
+			var selected_filtered_strategy = 0;
+			var selected_start_total_len = 0;
+			var selected_strat_len = 0;
+			var selected_tp_count = 0;
+			var selected_fp_count = 0;
+			var selected_fn_count = 0;
+			var selected_tn_count = 0;
+			var selected_total = 0;
+			var selected_precision_val = 0.0;
+			var selected_effort_val = 0.0;
+			var selected_recall_val = 0.0;
+			var selected_epss_threshold = 0;
+
+			for (var epss_threshold = 0.0; epss_threshold <= 1.0; epss_threshold += 0.001) {
+				var t = roundToAsFloat(epss_threshold, rounding_precision);
+				//console.info("calcStartEfficiency epss_threshold", t);
+				var filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, t);
+				var start_total_len = strat_data_cve.length;
+				var strat_len = filtered_strategy.length;
+				var tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+				var fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+				var fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+				var tn_count = tn_calc(strat_data_cve, filtered_strategy, exploit_data_cve);
+				var total = tp_count + fp_count + tn_count + fn_count;
+				var precision_val = precision_calc(tp_count, fp_count);
+				var recall_val = recall_calc(tp_count, fn_count);
+				var effort_val = roundTo(strat_len / start_total_len, rounding_precision);
+				var d1 = Math.abs(efficiency_threshold - precision_val);
+				var d2 = Math.abs(efficiency_threshold - selected_precision_val);
+				// select the coverage threshold that is the closest to the specified threshold.
+				// Is it the already selected value or is it the newly calculated value?
+				if (d1 < d2 || selected_precision_val == 0.0) {
+					selected_epss_threshold = t;
+					efficiency_strategy_cvss_threshold = t;
+					selected_tp_count = tp_count;
+					selected_fp_count = fp_count;
+					selected_fn_count = fn_count;
+					selected_tn_count = tn_count;
+					selected_strat_len = strat_len;
+					selected_total = total;
+					selected_precision_val = precision_val;
+					selected_effort_val = effort_val;
+					selected_recall_val = recall_val;
+				}
+			}
+			var table = "<table class='table'>";
+			table += "<th>";
+			table += "EPSS";
+			table += "</th>";
+			table += "<th>";
+			table += "True Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "False Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "True Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "False Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "Remediation";
+			table += "</th>";
+			table += "<th>";
+			table += "Total";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Efficiency";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Coverage";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Effort";
+			table += "</th>";
+
+			table += "<tr>";
+
+			table += "<td>";
+			table += roundTo(selected_epss_threshold, rounding_precision);
+			table += "</td>";
+			table += "<td>";
+			table += selected_tp_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_fp_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_tn_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_fn_count;
+			table += "</td>";
+			table += "<td>";
+			table += selected_strat_len;
+			table += "</td>";
+			table += "<td>";
+			table += selected_total;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_precision_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_recall_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += selected_effort_val;
+			table += "</td>";
+
+			table += "</tr>";
+
+			table += "</table>";
+			$("#calculated-strat-efficiency").html(table);
+		};
+
+		function showIntersectionsHTMLTable(ec_threshold, ee_threshold) {
+			var tmp_threshold = roundToAsFloat(ec_threshold, 4);
+			var filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, tmp_threshold);
+			var start_total_len = strat_data_cve.length;
+			var strat_len = filtered_strategy.length;
+			var tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+			var fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+			var fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+			var tn_count = tn_calc(strat_data_cve, filtered_strategy, exploit_data_cve);
+			var total = tp_count + fp_count + tn_count + fn_count;
+			var precision_val = precision_calc(tp_count, fp_count);
+			var recall_val = recall_calc(tp_count, fn_count);
+			var effort_val = roundTo(strat_len / start_total_len, 4);
+			var table = "<table class='table'>";
+			table += "<th>";
+			table += "Intersection";
+			table += "</th>";
+			table += "<th>";
+			table += "EPSS";
+			table += "</th>";
+			table += "<th>";
+			table += "True Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "False Positive";
+			table += "</th>";
+			table += "<th>";
+			table += "True Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "False Negative";
+			table += "</th>";
+			table += "<th>";
+			table += "Remediation";
+			table += "</th>";
+			table += "<th>";
+			table += "Total";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Efficiency";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Coverage";
+			table += "</th>";
+
+			table += "<th>";
+			table += "Effort";
+			table += "</th>";
+
+			table += "<tr>";
+
+			table += "<td>";
+			table += "Efficiency/Coverage";
+			table += "</td>";
+			table += "<td>";
+			table += ec_threshold;
+			table += "</td>";
+			table += "<td>";
+			table += tp_count;
+			table += "</td>";
+			table += "<td>";
+			table += fp_count;
+			table += "</td>";
+			table += "<td>";
+			table += tn_count;
+			table += "</td>";
+			table += "<td>";
+			table += fn_count;
+			table += "</td>";
+			table += "<td>";
+			table += strat_len;
+			table += "</td>";
+			table += "<td>";
+			table += total;
+			table += "</td>";
+
+			table += "<td>";
+			table += precision_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += recall_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += effort_val;
+			table += "</td>";
+
+			table += "</tr>";
+
+			tmp_threshold = roundToAsFloat(ee_threshold, 4)
+			filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, tmp_threshold)
+			start_total_len = strat_data_cve.length;
+			strat_len = filtered_strategy.length;
+			tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+			fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+			fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+			tn_count = tn_calc(strat_data_cve, filtered_strategy, exploit_data_cve);
+			total = tp_count + fp_count + tn_count + fn_count;
+			precision_val = precision_calc(tp_count, fp_count);
+			recall_val = recall_calc(tp_count, fn_count);
+			effort_val = roundTo(strat_len / start_total_len, 4);
+
+			table += "<tr>";
+
+			table += "<td>";
+			table += "Efficiency/Effort";
+			table += "</td>";
+			table += "<td>";
+			table += ee_threshold;
+			table += "</td>";
+			table += "<td>";
+			table += tp_count;
+			table += "</td>";
+			table += "<td>";
+			table += fp_count;
+			table += "</td>";
+			table += "<td>";
+			table += tn_count;
+			table += "</td>";
+			table += "<td>";
+			table += fn_count;
+			table += "</td>";
+			table += "<td>";
+			table += strat_len;
+			table += "</td>";
+			table += "<td>";
+			table += total;
+			table += "</td>";
+
+			table += "<td>";
+			table += precision_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += recall_val;
+			table += "</td>";
+
+			table += "<td>";
+			table += effort_val;
+			table += "</td>";
+
+			table += "</tr>";
+
+			table += "</table>";
+			$("#show-intersections").html(table);
+		}
+
+
+		function plot_chart() {
+			// https://plotly.com/javascript/line-charts/#labelling-lines-with-annotations
+			var xData = [[], [], []];
+			var yData = [[], [], []];
+			var start_total_len = strat_data_cve.length;
+			var max_threshold = find_max_threshold(strat_data_threshold_val);
+			console.log('Max threshold found >=', max_threshold);
+			var threshold = 0.0;
+			var best_eff_cov = -1;
+			var best_ec_epss = 0;
+			var best_ec_tp_count = 0;
+			var best_ec_fp_count = 0;
+			var best_ec_fn_count = 0;
+
+			var best_eff_effort = -1;
+			var best_ee_epss = 0;
+			var best_ee_tp_count = 0;
+			var best_ee_fp_count = 0;
+			var best_ee_efficiency = 0;
+			var best_ee_effort = 0;
+
+			while (threshold <= 1.0 && threshold <= max_threshold) {
+				tmp_threshold = roundToAsFloat(threshold, 4);
+				filtered_strategy = filter_threshold(strat_data_cve, strat_data_threshold_val, tmp_threshold);
+				var strat_len = filtered_strategy.length;
+				var tp_count = tp_calc(filtered_strategy, exploit_data_cve);
+				var fp_count = fp_calc(filtered_strategy, exploit_data_cve);
+				var fn_count = fn_calc(filtered_strategy, exploit_data_cve);
+				var precision_val = precision_calc(tp_count, fp_count);
+				var recall_val = recall_calc(tp_count, fn_count);
+				var effort_val = roundToAsFloat(strat_len / start_total_len, 4);
+				var tbec = Math.abs(fp_count - fn_count);
+				if ((best_eff_cov == -1 || tbec < best_eff_cov) && tp_count > 0 && fp_count > 0 && fn_count > 0) {
+					best_eff_cov = tbec;
+					best_ec_epss = tmp_threshold;
+					best_ec_tp_count = tp_count;
+					best_ec_fp_count = fp_count;
+					best_ec_fn_count = fn_count;
+				}
+				var tbee = Math.abs(precision_val - effort_val);
+				if ((best_eff_effort == -1 || tbee < best_eff_effort) && tp_count > 0 && fp_count > 0 && fn_count > 0) {
+					best_eff_effort = roundToAsFloat(tbee, 4);
+					best_ee_epss = tmp_threshold;
+					best_ee_tp_count = tp_count;
+					best_ee_fp_count = fp_count;
+					best_ee_efficiency = precision_val;
+					best_ee_effort = effort_val;
+				}
+
+				xData[0].push(threshold);
+				yData[0].push(precision_val);
+				xData[1].push(threshold);
+				yData[1].push(recall_val);
+				xData[2].push(threshold);
+				yData[2].push(effort_val);
+				threshold += 0.001;
+			}
+
+			console.info("Best EFF COV", best_ec_epss, best_eff_cov, best_ec_tp_count, best_ec_fp_count, best_ec_fn_count);
+			console.info("Best EFF EFF", best_ee_epss, best_eff_effort, best_ee_tp_count, best_ee_fp_count, best_ee_efficiency, best_ee_effort);
+
+			var colors = ['rgba(241,110,0, 1)', 'rgba(189,189,189,1)', 'rgba(127,113,179,1)', 'rgba(115,115,115,1)'];
+
+			var lineSize = [4, 4, 4];
+
+			var labels = ['Efficiency', 'Coverage', 'Effort'];
+
+			var data = [];
+
+			var xData_end = 99;
+			var yData_end = 99;
+
+			for (var i = 0; i < xData.length; i++) {
+				var result = {
+					x: xData[i],
+					y: yData[i],
+					type: 'scatter',
+					mode: 'lines',
+					name: labels[i],
+					hovertemplate: 'EPSS:<b>%{x:.00001%}</b> at <b>%{y:.00001%}</b>',
+					line: {
+						color: colors[i],
+						width: lineSize[i]
+					}
+				};
+				data.push(result);
+			}
+			var tickvals = [0];
+			for (var i = -3; i <= 0; i += 1) {
+				var j = 10 ** (i);
+				for(var k = 1; k < 10; k += 1) {
+					tickvals.push(roundTo(j*k, 4));
+				}
+			}
+			tickvals.push(1)
+			
+			var ticktext =  [];
+			for (var i  =  0; i < tickvals.length; i++) {
+				var val = tickvals[i];
+				if (val == 0.001 || val == 0.01 || val == 0.1 || val == 1) {
+					ticktext.push(String(val * 100) + "%");
+				} else {
+					ticktext.push("        "); 
+				}
+			}
+
+			var layout = {
+				showlegend: true,
+				legend: {
+					orientation: "h",
+					x: 0.25,
+					y: 1.05,
+				},
+				font: {
+					family: '"Helvetica Neue", Helvetica, Arial',
+					size: 20,
+					color: '#000'
+				},
+				height: 800,
+				width: 1100,
+				xaxis: {
+					showline: true,
+					showgrid: true,
+					showticklabels: true,
+					linecolor: 'rgb(82,82,82)',
+					linewidth: 2,
+					autotick: false,
+					tickmode: "array",
+					tickvals: tickvals,
+					ticktext: ticktext,
+					tickangle: 0,
+					type: "log",
+					range: tickvals,
+					title: {
+						font: {
+							family: '"Helvetica Neue", Helvetica, Arial',
+							size: 30,
+							color: 'rgb(82,82,82)'
+						},
+						text: "EPSS Threshold"
+					},
+					ticks: 'outside',
+					tickcolor: 'rgb(204,204,204)',
+					tickwidth: 2,
+					ticklen: 5,
+					tickfont: {
+						family: '"Helvetica Neue", Helvetica, Arial',
+						size: 12,
+						color: 'rgb(82, 82, 82)'
+					},
+					tickformat: ".001%"
+				},
+				yaxis: {
+					showgrid: true,
+					zeroline: false,
+					showline: true,
+					showticklabels: true,
+					linecolor: 'rgb(82,82,82)',
+					linewidth: 2,
+					ticks: 'outside',
+					tickcolor: 'rgb(204,204,204)',
+					range: [0, 1.05],
+					title: {
+						font: {
+							family: '"Helvetica Neue", Helvetica, Arial',
+							size: 30,
+							color: 'rgb(82,82,82)'
+						},
+						text: "Value of Metric"
+					},
+					tickfont: {
+						family: '"Helvetica Neue", Helvetica, Arial',
+						size: 12,
+						color: 'rgb(82, 82, 82)'
+					},
+					tickformat: ".001%"
+				},
+				autosize: true,
+				automargin: "true"
+			};
+			Plotly.newPlot('myDiv', data, layout);
+			showIntersectionsHTMLTable(best_ec_epss, best_ee_epss);
+		}
+	}
+
+	);
+
+</script>
+
+</html>
